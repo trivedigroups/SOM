@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family:sans-serif;text-align:center;background:#f1f3f5;margin:0">
+<h3>Lathe Operations on a Single Workpiece</h3>
+<canvas id="c" width="900" height="420" style="background:#fff;border:1px solid #888"></canvas><br>
+Speed: <input id="sp" type="range" min="1" max="10" value="4">
+<button onclick="reset()">Restart</button>
+<script>
+const c=document.getElementById('c'),g=c.getContext('2d'),spd=document.getElementById('sp');
+const AX=240,X0=170,X1=640;
+let prof,knurl,k0,k1,wp,tx,tr,tool,label,ang,wait,chips;
+// waypoints: [x, r, mode, label, toolType]  (r = tool tip distance from axis)
+const W=[
+ [620,62,'rapid','1. FACING: tool feeds across the end face','turn'],
+ [620,0,'face'],
+ [620,70,'rapid'],
+ [625,44,'rapid','2. PLAIN (STRAIGHT) TURNING: tool feeds along the axis, reducing diameter','turn'],
+ [200,44,'cut'],
+ [200,70,'rapid'],
+ [625,70,'rapid'],
+ [625,32,'rapid','3. STEP TURNING: a second, smaller diameter is cut, leaving a shoulder','turn'],
+ [420,32,'cut'],
+ [420,70,'rapid'],
+ [300,70,'rapid'],
+ [300,44,'rapid','4. TAPER TURNING: tool feeds at an angle to the axis','turn'],
+ [420,32,'cut'],
+ [420,75,'rapid'],
+ [290,75,'rapid'],
+ [290,46,'rapid','5. KNURLING: knurling wheel presses a diamond pattern into the surface','knurl'],
+ [195,44,'knurl'],
+ [195,80,'rapid','Complete: faced, turned, stepped, tapered and knurled','turn'],
+ [660,80,'rapid']
+];
+function reset(){
+  prof=[];for(let x=0;x<=X1-X0;x++)prof.push(50);
+  knurl=false;k0=999;k1=0;wp=0;tx=660;tr=80;tool='turn';label='Raw bar stock held in the chuck';ang=0;wait=60;chips=[];
+}
+reset();
+function setR(x,r){const i=Math.round(x-X0);if(i>=0&&i<prof.length&&r<prof[i])prof[i]=r;}
+function step(){
+  const s=spd.value/4;
+  if(wait>0){wait--;return;}
+  if(wp>=W.length){wait=150;wp=0;if(true){reset();wait=100;}return;}
+  const t=W[wp];
+  if(t[3]){label=t[3];tool=t[4];}
+  const dx=t[0]-tx,dy=t[1]-tr,d=Math.hypot(dx,dy);
+  const v=(t[2]=='rapid'?5:1.1)*s;
+  if(d<=v){tx=t[0];tr=t[1];wp++;return;}
+  tx+=dx/d*v;tr+=dy/d*v;
+  if(t[2]=='cut'||t[2]=='knurl'){
+    for(let x=Math.floor(tx-2);x<=Math.ceil(tx+2);x++)setR(x,Math.max(tr,0));
+    if(Math.random()<0.4&&t[2]=='cut')chips.push({x:tx,y:AX-tr,vx:Math.random()*2-0.5,vy:-1-Math.random()*2,l:30});
+    if(t[2]=='knurl'){knurl=true;k0=Math.min(k0,tx);k1=Math.max(k1,290);}
+  }
+  if(t[2]=='face'){
+    for(let x=Math.floor(tx);x<=X1;x++)setR(x,Math.max(tr,0));
+    if(Math.random()<0.4)chips.push({x:tx+4,y:AX-tr,vx:1+Math.random()*2,vy:-1-Math.random()*2,l:30});
+  }
+}
+function wpPath(){g.beginPath();g.moveTo(X0,AX-prof[0]);
+  for(let i=0;i<prof.length;i++)g.lineTo(X0+i,AX-prof[i]);
+  for(let i=prof.length-1;i>=0;i--)g.lineTo(X0+i,AX+prof[i]);g.closePath();}
+function draw(){
+  g.clearRect(0,0,900,420);
+  // centre line
+  g.setLineDash([10,4,2,4]);g.strokeStyle='#c00';g.beginPath();g.moveTo(40,AX);g.lineTo(870,AX);g.stroke();g.setLineDash([]);
+  // chuck
+  g.fillStyle='#444';g.fillRect(60,AX-85,70,170);g.fillStyle='#666';g.fillRect(130,AX-60,45,22);g.fillRect(130,AX+38,45,22);
+  g.fillStyle='#fff';g.font='12px sans-serif';g.textAlign='center';g.fillText('Chuck',95,AX-92+0);
+  // workpiece
+  wpPath();g.fillStyle='#c0c7ce';g.fill();g.strokeStyle='#223';g.lineWidth=1.5;g.stroke();
+  // rotation lines
+  g.save();wpPath();g.clip();g.strokeStyle='rgba(60,70,90,.35)';g.lineWidth=1;
+  for(let j=0;j<8;j++){const f=Math.sin(ang+j*Math.PI/4);g.beginPath();
+    for(let i=0;i<prof.length;i+=3){const y=AX-f*prof[i];i?g.lineTo(X0+i,y):g.moveTo(X0+i,y);}g.stroke();}
+  if(knurl){g.beginPath();g.rect(Math.max(k0,X0),0,k1-Math.max(k0,X0),420);g.clip();
+    g.strokeStyle='#333';g.lineWidth=1;
+    for(let x=150;x<320;x+=6){g.beginPath();g.moveTo(x,AX-60);g.lineTo(x+60,AX+60);g.stroke();g.beginPath();g.moveTo(x+60,AX-60);g.lineTo(x,AX+60);g.stroke();}}
+  g.restore();
+  // tool
+  const ty=AX-tr;
+  if(tool=='knurl'){
+    g.fillStyle='#b35';g.beginPath();g.arc(tx,ty-12,12,0,7);g.fill();g.fillStyle='#733';g.fillRect(tx-4,ty-60,8,40);g.fillStyle='#fff';g.fillRect(tx-2,ty-14,4,4);
+  } else {
+    g.fillStyle='#d33';g.beginPath();g.moveTo(tx,ty);g.lineTo(tx+16,ty-18);g.lineTo(tx+16,ty-80);g.lineTo(tx+50,ty-80);g.lineTo(tx+50,ty-18);g.lineTo(tx+20,ty-18);g.closePath();g.fill();
+  }
+  // chips
+  g.fillStyle='#e90';chips.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.l--;g.fillRect(p.x,p.y,3,3);});
+  chips=chips.filter(p=>p.l>0);
+  // labels
+  g.fillStyle='#000';g.font='bold 15px sans-serif';g.textAlign='center';g.fillText(label,450,30);
+  g.font='13px sans-serif';g.fillStyle='#555';g.fillText('Workpiece rotates ⟳  |  Cutting tool is fed by the carriage and cross-slide',450,52);
+  g.fillStyle='#d33';g.fillText('Cutting tool',tx+35,Math.max(75,ty-95));
+}
+function loop(){requestAnimationFrame(loop);ang+=0.25*spd.value/4;step();draw();}
+loop();
+</script>
+</body>
+</html>
